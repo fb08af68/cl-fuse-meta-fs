@@ -1,0 +1,9 @@
+meta-fs: completely Lisp-level bindings for CL-FUSE
+
+The idea is that you specify contents of your FS as the results of running
+functions that can return files or functions generating directories (of course,
+there are also callbacks for modification)
+
+Load file lisp-meta-fs-test.lisp to see it in action in /tmp/test
+
+Among other things, this allows browsing Lisp packages and symbols in them.
