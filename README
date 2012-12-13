@@ -6,4 +6,9 @@ there are also callbacks for modification)
 
 Load file lisp-meta-fs-test.lisp to see it in action in /tmp/test
 
+Writing:
+  (CL-FUSE-META-FS::MK-FILE "a.lisp" (FORMAT NIL "~a~%" (+ 2 3)))
+to file structured-code/a.lisp will create structured-code-result/a.lisp 
+containing line "5".
+
 Among other things, this allows browsing Lisp packages and symbols in them.

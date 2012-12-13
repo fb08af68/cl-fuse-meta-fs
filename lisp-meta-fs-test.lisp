@@ -4,7 +4,6 @@
 
 (require :cl-fuse-meta-fs)
 #+sbcl (require :sb-posix)
-(require :cl-ppcre)
 (require :iterate)
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
@@ -161,7 +160,9 @@
                      ))
            (mk-creator 
             name
-            (when (not (cl-ppcre:scan "[.].*[.]sw." name))
+            (when (not (equal ".sw" (subseq name 
+					    (- (length name) 4) 
+					    (- (length name) 1))))
                   (setf (gethash name *structured-description*) ""))
             nil))
    (mk-file "inject-code" ""

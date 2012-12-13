@@ -42,6 +42,7 @@
   (cond
    ((stringp n) n)
    ((arrayp n) (cl-fuse::octets-to-string n *meta-fs-name-encoding*))
+   ((listp n) (format nil "~{/~a~}" (mapcar 'decode-name n)))
    (t (format nil "error-decoding-name:~s~%" n))
    ))
 
