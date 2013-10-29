@@ -46,7 +46,7 @@
    (t (format nil "error-decoding-name:~s~%" n))
    ))
 
-(defmacro mk-file (name contents &optional (writer nil) (remover nil))
+(defmacro mk-file (name contents &optional (writer nil) (remover nil) (size nil) (executable nil))
   ``(:type :file :name ,(decode-name ,name) :contents ,(lambda () ,contents) 
            :writer ,,(cond 
                      ((null writer) nil)
@@ -56,6 +56,8 @@
                                  ,@(cdr writer)))
                      )
            :remover ,,(when remover `(lambda () ,remover))
+	   :size ,,(if size `(lambda () ,size))
+	   :executable ,,executable
            ))
 
 (defmacro mk-dir (name kind &rest contents)
@@ -225,7 +227,6 @@
 	 ;(fuse-complain "Final retrieval")
 	 (cond 
 	   ((null path) initial)
-	   ((equal (car path) "") initial)
 	   ((eq (getf initial :type) :error) initial)
 	   ((eq (getf initial :type) :file) 
 	    `(:type :error :contents ,cl-fuse:error-ENOTDIR))
@@ -265,7 +266,7 @@
     val
     ))
 
-(defun list-directory (obj &key path)
+(defun list-directory (obj &key (path nil path-given-p))
   (let* ((listing-type (getf obj :type))
          (listing-data (case listing-type
                              (:dir (funcall (getf obj :contents)))
@@ -276,14 +277,16 @@
                         (:generate (mapcar (getf obj :contents)
                                            listing-data))
                         (t nil)))
-	 (now (when path (get-universal-time)))
+	 (now (when path-given-p (get-universal-time)))
          )
+        (fuse-complain "Listing directory at path ~s~%Object is ~s~%Entries are ~{~s~%~}~%" path obj entries)
         (iter (for entry in entries)
               (iter:with result = nil)
-	      (iter:with rev-path := (and path (reverse path)))
+	      (iter:with rev-path := (reverse path))
 	      (iter:for et := (getf entry :type))
+	      ;(fuse-complain "Looking at entry ~s~%Type is ~s~%" entry et)
 	      (when (and 
-		      *object-cache-duration* rev-path 
+		      *object-cache-duration* path-given-p
 		      (or (eq et :file) (eq et :dir) (eq et :symlink)))
 		;(fuse-complain "Pushing into cache ~s ~s" entry rev-path)
 		(with-lock-held 
@@ -297,9 +300,14 @@
 		    ((:file)
                      (push (getf entry :name) result))
                     (:generate
-                     (setf result (append (list-directory entry :path path) 
-                                          result)))
+                     (setf result (append 
+				    (if 
+				      path-given-p
+				      (list-directory entry :path path) 
+				      (list-directory entry))
+				    result)))
                     (t nil))
+	      ;(fuse-complain "Listed directory ~s, result is~%~{~s~%~}~%----- END OF LISTING ----" path result)
               (finally (return result)))))
 
 (defun launch-creator (obj kind name)
@@ -347,6 +355,7 @@
 (defmacro make-op (f args &rest body)
   `(defun ,f ,(append `(path) args `(&rest more-args))
           (declare (ignorable more-args))
+	  ;(fuse-complain "make-op-created operation ~s called with path ~s~%" ',f path)
           (let* ((obj (get-object path *description*))
                  (result (progn ,@body))
                  )
@@ -354,6 +363,7 @@
                 )))
 
 (make-op directoryp ()
+	 ;(fuse-complain "Is-directory? ~s ~s" path obj)
   (eq (getf obj :type) :dir))
 
 (make-op directory-content ()
@@ -380,13 +390,14 @@
   (when (eq (getf obj :type) :file)
     (let*
       (
-       (content (funcall (getf obj :contents)))
+       (size (getf obj :size))
+       (content (and (not size) (funcall (getf obj :contents))))
        (content
 	 (if (stringp content)
 	   (cl-fuse::string-to-octets content :full-range)
 	   content))
        )
-      (length content))))
+      (if size (funcall size) (length content)))))
 
 (make-op file-write-whole (data)
   (when (getf obj :writer)
@@ -494,6 +505,9 @@
 (make-op file-writeable-p ()
   (getf obj :writer))
 
+(make-op file-executable-p ()
+	 (getf obj :executable))
+
 (make-op 
   symlink (content)
   (with-lock-held
@@ -524,6 +538,7 @@
                     :file-size #'file-size
                     :file-write-whole #'file-write-whole
                     :file-writeable-p #'file-writeable-p
+                    :file-executable-p #'file-executable-p
                     :file-flush #'file-flush
                     :file-release #'file-release
                     :truncate #'file-truncate
