@@ -181,16 +181,43 @@
 	     (gethash key *object-cache*)))
 	 (mtime (car data))
 	 )
-    (if (and
-	  mtime 
-	  (<= (- now mtime) *object-cache-duration*))
-      (progn
+    (cond
+      ((not mtime) 
+       ;(fuse-complain "Cache miss: ~s" key)
+       (values nil nil))
+      ((>  (- now mtime) *object-cache-duration*)
+       ;(fuse-complain "Cache expiry: ~s" key)
+       (with-lock-held (*object-cache-lock*)
+		       (remhash key *object-cache*))
+       (values nil nil))
+      (t 
 	;(fuse-complain "Cache hit: ~s" key data)
 	(values (second data) t))
-      (progn
-	;(fuse-complain "Cache miss: ~s" key)
-	(values nil nil)))))
-        
+      )))
+
+(defun clean-object-cache (&optional (now (get-universal-time)))
+  (let*
+    (
+     (keys nil)
+     (cutoff (- now *object-cache-duration*))
+     )
+    (with-lock-held
+      (*object-cache-lock*)
+      (maphash
+	(lambda (k v)
+	  (when
+	    (< (car v) cutoff)
+	    (push k keys)))
+	*object-cache*))
+    (with-lock-held
+      (*object-cache-lock*)
+      (loop
+	for k in keys do
+	(remhash k *object-cache*)))))
+
+(defun flush-object-cache ()
+  (setf *object-cache* (make-hash-table :test 'equal)))
+
 (defun get-object (path initial &optional (rev-path-already nil))
   ;(fuse-complain "Getting object ~s from ~s (cache: ~s)" path initial *object-cache-duration*)
   (let*
