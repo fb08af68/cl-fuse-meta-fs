@@ -254,6 +254,8 @@
 	 ;(fuse-complain "Final retrieval")
 	 (cond 
 	   ((null path) initial)
+	   ((equal (first path) "")
+	    (get-object (cdr path) initial))
 	   ((eq (getf initial :type) :error) initial)
 	   ((eq (getf initial :type) :file) 
 	    `(:type :error :contents ,cl-fuse:error-ENOTDIR))
