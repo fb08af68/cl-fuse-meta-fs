@@ -58,6 +58,10 @@
    (mk-symlink "your-tmp-too" (list "tmp"))
    (mk-dir "a-directory" :just
            (mk-file "INFO" "An example directory")
+	   (mk-splice
+	     (mk-file "s1" "Spliced file 1")
+	     (mk-file "s2" "Spliced file 2")
+	     )
            (mk-generator x parse-integer (<= 1 x 10) 
                          (loop for n from 1 to 5 collect n)
                          (mk-file (fmt "~a" x)

@@ -18,6 +18,7 @@
            #:mk-pair-generator
            #:mk-creator
            #:mk-dir-remover
+	   #:mk-splice
            #:fmt
            #:id
            #:cached-expr
@@ -60,12 +61,39 @@
 	   :executable ,,executable
            ))
 
+(defmacro mk-splice (&rest x)
+  `(list 'mk-splice ,@x))
+
+(defun flatten-splicing (x)
+  (loop 
+    with res := nil
+    for y in x
+    do
+    (cond
+      ((and
+	 (listp y)
+	 (equal (first y) 'mk-splice)
+	 )
+       (loop for z in (flatten-splicing (rest y))
+	     do (push z res)))
+      (t (push y res)))
+    finally (return (reverse res))))
+
+(defun cast-splice-as-progn (x)
+  (if
+    (and
+      (listp x)
+      (equal (first x) 'mk-splice)
+      )
+    (first (last x))
+    x))
+
 (defmacro mk-dir (name kind &rest contents)
   ``(:type :dir :name ,(decode-name ,name) :contents 
           ,(lambda () 
                   ,(case kind
-                       (:just `(list ,@contents))
-                       (:eval `(progn ,@contents))
+                       (:just `(flatten-splicing (list ,@(flatten-splicing contents))))
+                       (:eval `(flatten-splicing (progn ,@contents)))
                     ))))
 
 (defmacro mk-symlink (name contents &optional (remover nil))
@@ -123,8 +151,8 @@
 			       (,var (list ,var))
 			       )
 			      ,lister)
-			      :test 'equal 
-			      :key 'first))
+			    :test 'equal 
+			    :key 'first))
            :predicate ,(lambda (,var) 
                                (find (first ,var)
                                      ,lister
@@ -279,8 +307,9 @@
 			      (return-from get-object-cached
 					   (get-object 
 					     (cdr path)
-					     (funcall (getf entry :contents)
-						      val))))))
+					     (cast-splice-as-progn
+					       (funcall (getf entry :contents)
+							val)))))))
 			(t nil)))
 		`(:type :error :contents ,cl-fuse:error-ENOENT)
 		)))))
@@ -303,8 +332,11 @@
                              (t nil)))
          (entries (case listing-type 
                         (:dir listing-data)
-                        (:generate (mapcar (getf obj :contents)
-                                           listing-data))
+                        (:generate 
+			  (mapcar 
+			    'cast-splice-as-progn
+			    (mapcar (getf obj :contents)
+				    listing-data)))
                         (t nil)))
 	 (now (when path-given-p (get-universal-time)))
          )
