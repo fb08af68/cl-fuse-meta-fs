@@ -6,9 +6,6 @@
 #+sbcl (require :sb-posix)
 (require :iterate)
 
-(eval-when (:compile-toplevel :load-toplevel :execute)
-  (unexport 'iterate:terminate :iterate))
-
 (use-package :cl-fuse-meta-fs)
 (use-package :iterate)
 
