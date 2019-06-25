@@ -42,7 +42,12 @@
 (defun decode-name (n) 
   (cond
    ((stringp n) n)
-   ((arrayp n) (cl-fuse::octets-to-string n *meta-fs-name-encoding*))
+   ((arrayp n)
+    (multiple-value-bind
+      (res err)
+      (ignore-errors (cl-fuse::octets-to-string n *meta-fs-name-encoding*))
+      (or res (format nil "error ~a decoding name: ~s~%"
+                      err n))))
    ((listp n) (format nil "~{/~a~}" (mapcar 'decode-name n)))
    (t (format nil "error-decoding-name:~s~%" n))
    ))
@@ -580,7 +585,7 @@
     content))
 
 (defun run-lisp-meta-fs (description &optional (target-path "/tmp/test") (call-manager nil)
-  (thread-pool-size 8) (extra-fuse-args nil))
+  (thread-pool-size 16) (extra-fuse-args nil))
   (when call-manager (setf (pcall:thread-pool-size) thread-pool-size))
   (setf *description* `(:type :dir :contents ,(constantly description) :root t))
   (ignore-errors (ensure-directories-exist (concatenate 'string target-path "/")))
@@ -623,7 +628,8 @@
 						     (first-finished (apply 'pcall:select-one tasks))
 						     )
 						    (when first-finished
-						      (pcall:join first-finished)
+						      (cl-fuse::just-print-errors
+                                                        (pcall:join first-finished))
 						      (setf tasks (remove first-finished tasks)))
 						    )
 					       )
